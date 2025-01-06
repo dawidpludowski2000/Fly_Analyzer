@@ -1,0 +1,195 @@
+#UWAGA - NA KOŃCU KODU, ZARAZ POD  if __name__ == "__main__":
+#    analyzer = LotyAnalyzer(r'TUTAJ\PODAC\SCIEZKE\DO\PLIKU\LOTY.TXT')
+#NP JEŚLI NA PULPICIE, JAK U MNIE TO :
+# analyzer = LotyAnalyzer(r'C:\Users\nazwa_uzytkownika\Desktop\loty.txt')
+#TAK, NALEŻY POBRAĆ PLIK loty.txt
+#NIESTETY JEST TAM BARDZO DUŻO DANYCH, WIEC NIE BYLO SENSU WKLEJAC ICH BEZPOSREDNIO DO KODU
+
+#UWAGA/2
+#NA NIEKTORYCH WYKRESACH SA BRZYDKIE ETYKIETY, NIESTETY NIE UDALO MI SIE TYCH NAPISOW UMIESCIC W LEPSZY SPOSOB
+#TU NA SIEBIE NACHODZILY, TU WYCHODZILY POZA SZEROKOSC OKNA, DLATEGO ZOSTAWIAM W AKTUALNYM STANIE
+
+
+import matplotlib.pyplot as plt
+import pandas as pd
+
+
+class LotyAnalyzer:
+    def __init__(self, filepath):
+        self.filepath = filepath
+        self.data_dict = {}
+        self.df = pd.DataFrame()
+
+    def load_data(self):
+        with open(self.filepath, 'r', encoding='utf-8') as file:
+            for line in file:
+                parts = line.strip().split('\t')
+                if len(parts) < 4:
+                    print(f"Błąd w linii: {line}")
+                    continue
+                num = int(parts[0])
+                city = parts[1]
+                date = parts[2]
+                time = parts[3]
+                self.data_dict[num] = [city, date, time]
+
+        self.df = pd.DataFrame.from_dict(self.data_dict, orient='index', columns=['Miasto', 'Data', 'Godzina'])
+        self.df['Data'] = pd.to_datetime(self.df['Data'])
+        self.df['Godzina'] = pd.to_datetime(self.df['Godzina'], format='%H:%M').dt.time  # Konwersja 'Godzina' na czas
+
+    def analyze_seasonal_flights(self):
+        # Dodajemy kolumnę "Sezon" do DataFrame
+        def get_season(date):
+            month = pd.to_datetime(date).month
+            if month in [3, 4, 5]:
+                return 'Wiosna'
+            elif month in [6, 7, 8]:
+                return 'Lato'
+            elif month in [9, 10, 11]:
+                return 'Jesień'
+            else:
+                return 'Zima'
+
+        self.df['Sezon'] = self.df['Data'].apply(get_season)
+        seasonal_counts = self.df['Sezon'].value_counts()
+
+        # Wykres dla liczby lotów w każdym sezonie
+        ax = seasonal_counts.plot(kind='bar', color='skyblue', title='Liczba lotów w każdym sezonie')
+        plt.xlabel('Sezon')
+        plt.ylabel('Liczba lotów')
+
+        # Znajdowanie sezonów z największą i najmniejszą liczbą lotów
+        max_count = seasonal_counts.max()
+        min_count = seasonal_counts.min()
+
+        # Dodanie etykiet "Najwięcej lotów" i "Najmniej lotów"
+        for i, p in enumerate(ax.patches):
+            count = p.get_height()
+            # Etykieta dla sezonu z największą liczbą lotów
+            if count == max_count:
+                ax.text(p.get_x() + p.get_width() / 2, p.get_height() + 5,
+                        "Najwięcej lotów", ha='center', va='bottom', fontsize=10, color='red')
+            # Etykieta dla sezonu z najmniejszą liczbą lotów
+            elif count == min_count:
+                ax.text(p.get_x() + p.get_width() / 2, p.get_height() + 5,
+                        "Najmniej lotów", ha='center', va='bottom', fontsize=10, color='blue')
+
+        plt.show()
+
+    def analyze_flight_days(self):
+        self.df['Dzień tygodnia'] = self.df['Data'].dt.day_name()
+        day_counts = self.df['Dzień tygodnia'].value_counts()
+
+        # Tworzenie wykresu słupkowego
+        ax = day_counts.plot(kind='bar', color='lightgreen', title='Liczba lotów w poszczególne dni tygodnia')
+        plt.xlabel('Dzień tygodnia')
+        plt.ylabel('Liczba lotów')
+
+        # Dodanie etykiet wewnątrz słupków dla "Środa" i "Niedziela"
+        max_day = "Wednesday"
+        second_max_day = "Sunday"
+        max_count = day_counts[max_day]
+        second_max_count = day_counts[second_max_day]
+
+        for p in ax.patches:
+            if p.get_height() == max_count:
+                # Etykieta "Najwięcej lotów - Środa" w dolnej części słupka dla środy
+                ax.text(p.get_x() + p.get_width() / 2, p.get_height() * 0.25,
+                        "Najwięcej lotów - Środa", ha='center', va='center', fontsize=10, color='red')
+            elif p.get_height() == second_max_count:
+                # Etykieta "Drugi dzień z największą ilością lotów - Niedziela" w górnej części słupka dla niedzieli
+                ax.text(p.get_x() + p.get_width() / 2, p.get_height() * 0.75,
+                        "Drugi dzień z największą ilością lotów - Niedziela", ha='center', va='center', fontsize=10,
+                        color='blue')
+
+        plt.show()
+
+        plt.show()
+
+    def average_departure_time_per_city(self):
+        # Konwersja kolumny 'Godzina' na godziny dziesiętne, np. 06:30 -> 6.5
+        self.df['Godzina_decimal'] = self.df['Godzina'].apply(lambda t: t.hour + t.minute / 60)
+
+        # Obliczanie średniego czasu (w formacie dziesiętnym) dla każdego miasta
+        avg_times = self.df.groupby('Miasto')['Godzina_decimal'].mean()
+
+        # Wykres dla średniej godziny wylotów dla każdego miasta
+        avg_times.plot(kind='bar', color='coral', title='Średnia godzina wylotów dla każdego miasta')
+        plt.xlabel('Miasto')
+        plt.ylabel('Średnia godzina (w skali dziesiętnej)')
+        plt.show()
+
+    def earliest_and_latest_departures(self):
+        # Znajdowanie najwcześniejszego i najpóźniejszego czasu wylotu
+        earliest_departure = self.df.loc[self.df['Godzina'].idxmin()]
+        latest_departure = self.df.loc[self.df['Godzina'].idxmax()]
+
+        print("\nMiasto z najwcześniejszym wylotem:")
+        print(f"{earliest_departure['Miasto']} o godzinie {earliest_departure['Godzina']}")
+
+        print("\nMiasto z najpóźniejszym wylotem:")
+        print(f"{latest_departure['Miasto']} o godzinie {latest_departure['Godzina']}")
+
+        # Konwersja godzin na liczby dziesiętne dla wykresu
+        earliest_hour = earliest_departure['Godzina'].hour + earliest_departure['Godzina'].minute / 60
+        latest_hour = latest_departure['Godzina'].hour + latest_departure['Godzina'].minute / 60
+
+        # Tworzenie serii z wartościami liczbowymi i nazwami miast
+        times = pd.Series([earliest_hour, latest_hour], index=['Najwcześniejszy wylot', 'Najpóźniejszy wylot'])
+        cities = [earliest_departure['Miasto'], latest_departure['Miasto']]
+
+        # Wykres słupkowy dla najwcześniejszego i najpóźniejszego wylotu
+        ax = times.plot(kind='bar', color=['lightblue', 'salmon'], title='Najwcześniejszy i najpóźniejszy wylot')
+        plt.xlabel('Rodzaj wylotu')
+        plt.ylabel('Godzina (w skali dziesiętnej)')
+
+        # Dodanie nazw miast jako etykiety obok słupków
+        for i, p in enumerate(ax.patches):
+            ax.text(p.get_x() + p.get_width() / 2, p.get_height() + 0.1,
+                    f"{cities[i]}", ha='center', va='bottom', fontsize=10, color='black')
+
+        plt.show()
+
+    def departure_time_categories(self):
+        def categorize_time(hour):
+            if hour < 12:
+                return 'Poranne (przed 12)'
+            elif hour < 18:
+                return 'Popołudniowe (12-18)'
+            else:
+                return 'Wieczorne (po 18)'
+
+        self.df['Pora dnia'] = self.df['Godzina'].apply(lambda t: categorize_time(t.hour))
+        time_of_day_counts = self.df['Pora dnia'].value_counts()
+
+        time_of_day_counts.plot(kind='pie', autopct='%1.1f%%', startangle=90, colors=['#ff9999','#66b3ff','#99ff99'], title='Liczba lotów według pory dnia')
+        plt.ylabel('')
+        plt.show()
+
+    def departure_time_comparison_per_city(self):
+        def categorize_time(hour):
+            if hour < 12:
+                return 'Poranne (przed 12)'
+            elif hour < 18:
+                return 'Popołudniowe (12-18)'
+            else:
+                return 'Wieczorne (po 18)'
+
+        self.df['Pora dnia'] = self.df['Godzina'].apply(lambda t: categorize_time(t.hour))
+        time_of_day_counts = self.df.groupby(['Miasto', 'Pora dnia']).size().unstack(fill_value=0)
+
+        time_of_day_counts.plot(kind='bar', stacked=True, title='Podział lotów według pory dnia dla każdego miasta', color=['#ff9999','#66b3ff','#99ff99'])
+        plt.xlabel('Miasto')
+        plt.ylabel('Liczba lotów')
+        plt.show()
+
+# Użycie klasy
+if __name__ == "__main__":
+    analyzer = LotyAnalyzer(r'C:\Users\Dawid Płudowski\Desktop\loty.txt')
+    analyzer.load_data()
+    analyzer.analyze_seasonal_flights()
+    analyzer.analyze_flight_days()
+    analyzer.average_departure_time_per_city()
+    analyzer.earliest_and_latest_departures()
+    analyzer.departure_time_categories()
+    analyzer.departure_time_comparison_per_city()
